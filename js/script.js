@@ -1,297 +1,221 @@
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
+class TodoApp {
+    constructor() {
+        this.todos = JSON.parse(localStorage.getItem('todos')) || [];
+        this.currentFilter = 'all';
+        this.initializeElements();
+        this.bindEvents();
+        this.render();
+    }
+
+    initializeElements() {
+        this.taskInput = document.getElementById('taskInput');
+        this.dateInput = document.getElementById('dateInput');
+        this.addBtn = document.getElementById('addBtn');
+        this.errorMessage = document.getElementById('errorMessage');
+        this.filterBtn = document.getElementById('filterBtn');
+        this.filterSelect = document.getElementById('filterSelect');
+        this.deleteAllBtn = document.getElementById('deleteAllBtn');
+        this.todoTableBody = document.getElementById('todoTableBody');
+    }
+
+    bindEvents() {
+        this.addBtn.addEventListener('click', () => this.addTodo());
+        this.taskInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.addTodo();
+        });
+        this.dateInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') this.addTodo();
+        });
+        this.filterSelect.addEventListener('change', (e) => this.filterTodos(e.target.value));
+        this.deleteAllBtn.addEventListener('click', () => this.deleteAllTodos());
+    }
+
+    addTodo() {
+        const task = this.taskInput.value.trim();
+        const date = this.dateInput.value;
+
+        // Validate input
+        if (!this.validateInput(task, date)) {
+            return;
+        }
+
+        // Create new todo
+        const todo = {
+            id: Date.now(),
+            task: task,
+            date: date,
+            completed: false,
+            createdAt: new Date().toISOString()
+        };
+
+        this.todos.push(todo);
+        this.saveTodos();
+        this.clearInputs();
+        this.clearError();
+        this.render();
+    }
+
+    validateInput(task, date) {
+        if (!task) {
+            this.showError('Please enter a task');
+            return false;
+        }
+
+        if (!date) {
+            this.showError('Please select a due date');
+            return false;
+        }
+
+        const selectedDate = new Date(date);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        if (selectedDate < today) {
+            this.showError('Due date cannot be in the past');
+            return false;
+        }
+
+        return true;
+    }
+
+    showError(message) {
+        this.errorMessage.textContent = message;
+        setTimeout(() => this.clearError(), 3000);
+    }
+
+    clearError() {
+        this.errorMessage.textContent = '';
+    }
+
+    clearInputs() {
+        this.taskInput.value = '';
+        this.dateInput.value = '';
+    }
+
+    completeTodo(id) {
+        const todo = this.todos.find(t => t.id === id);
+        if (todo) {
+            todo.completed = !todo.completed;
+            this.saveTodos();
+            this.render();
+        }
+    }
+
+    deleteTodo(id) {
+        this.todos = this.todos.filter(t => t.id !== id);
+        this.saveTodos();
+        this.render();
+    }
+
+    deleteAllTodos() {
+        if (this.todos.length === 0) {
+            this.showError('No tasks to delete');
+            return;
+        }
+
+        if (confirm('Are you sure you want to delete all tasks?')) {
+            this.todos = [];
+            this.saveTodos();
+            this.render();
+        }
+    }
+
+    filterTodos(filter) {
+        this.currentFilter = filter;
+        this.render();
+    }
+
+    getFilteredTodos() {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        switch (this.currentFilter) {
+            case 'today':
+                return this.todos.filter(todo => {
+                    const todoDate = new Date(todo.date);
+                    return todoDate.getTime() === today.getTime();
+                });
+            case 'upcoming':
+                return this.todos.filter(todo => {
+                    const todoDate = new Date(todo.date);
+                    return todoDate > today && !todo.completed;
+                });
+            case 'overdue':
+                return this.todos.filter(todo => {
+                    const todoDate = new Date(todo.date);
+                    return todoDate < today && !todo.completed;
+                });
+            default:
+                return this.todos;
+        }
+    }
+
+    getStatus(todo) {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todoDate = new Date(todo.date);
+
+        if (todo.completed) {
+            return { status: 'completed', class: 'status-completed' };
+        } else if (todoDate < today) {
+            return { status: 'overdue', class: 'status-overdue' };
+        } else {
+            return { status: 'pending', class: 'status-pending' };
+        }
+    }
+
+    formatDate(dateString) {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    }
+
+    render() {
+        const filteredTodos = this.getFilteredTodos();
+        
+        if (filteredTodos.length === 0) {
+            this.todoTableBody.innerHTML = `
+                <tr class="empty-state">
+                    <td colspan="4">No task found</td>
+                </tr>
+            `;
+            return;
+        }
+
+        this.todoTableBody.innerHTML = filteredTodos.map(todo => {
+            const statusInfo = this.getStatus(todo);
+            return `
+                <tr>
+                    <td class="${todo.completed ? 'completed-task' : ''}">${todo.task}</td>
+                    <td>${this.formatDate(todo.date)}</td>
+                    <td>
+                        <span class="status-badge ${statusInfo.class}">
+                            ${statusInfo.status}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="action-buttons">
+                            <button class="action-btn complete-btn" onclick="todoApp.completeTodo(${todo.id})">
+                                ${todo.completed ? 'Undo' : 'Complete'}
+                            </button>
+                            <button class="action-btn delete-btn" onclick="todoApp.deleteTodo(${todo.id})">
+                                Delete
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    }
+
+    saveTodos() {
+        localStorage.setItem('todos', JSON.stringify(this.todos));
+    }
 }
 
-body {
-  font-family: "Arial", sans-serif;
-  background: linear-gradient(135deg, #667eea 0%, #bda2d7 100%);
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-}
-
-.container {
-  width: 100%;
-  max-width: 800px;
-}
-
-.todo-card {
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  border-radius: 20px;
-  padding: 30px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.title {
-  text-align: center;
-  color: white;
-  font-size: 2.5rem;
-  margin-bottom: 30px;
-  font-weight: 300;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-}
-
-/* Form Section */
-.form-section {
-  margin-bottom: 25px;
-}
-
-.input-group {
-  display: flex;
-  gap: 15px;
-  margin-bottom: 10px;
-}
-
-.task-input,
-.date-input {
-  flex: 1;
-  padding: 15px;
-  border: none;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.9);
-  font-size: 16px;
-  outline: none;
-  transition: all 0.3s ease;
-}
-
-.task-input {
-  flex: 2;
-}
-
-.task-input:focus,
-.date-input:focus {
-  background: white;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-}
-
-.add-btn {
-  padding: 15px 20px;
-  background: #8b5cf6;
-  color: white;
-  border: none;
-  border-radius: 12px;
-  font-size: 20px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.add-btn:hover {
-  background: #502bac;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(90, 64, 220, 0.359);
-}
-
-.error-message {
-  color: #ff6b6b;
-  font-size: 14px;
-  margin-top: 5px;
-  min-height: 20px;
-  padding-left: 5px;
-}
-
-/* Controls Section */
-.controls {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 15px;
-}
-
-.filter-section {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.filter-btn,
-.delete-all-btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 8px;
-  font-weight: bold;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  font-size: 14px;
-}
-
-.filter-btn {
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
-}
-
-.filter-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.filter-select {
-  padding: 10px 15px;
-  border: none;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.9);
-  outline: none;
-  cursor: pointer;
-}
-
-.delete-all-btn {
-  background: #ef4444;
-  color: white;
-}
-
-.delete-all-btn:hover {
-  background: #dc2626;
-  transform: translateY(-1px);
-}
-
-/* Table Section */
-.table-section {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.todo-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.todo-table th {
-  background: rgba(0, 0, 0, 0.2);
-  color: white;
-  padding: 15px;
-  text-align: left;
-  font-weight: bold;
-  font-size: 14px;
-  letter-spacing: 0.5px;
-}
-
-.todo-table td {
-  padding: 15px;
-  color: white;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.todo-table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.empty-state td {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.7);
-  font-style: italic;
-  padding: 40px;
-}
-
-.status-badge {
-  padding: 5px 12px;
-  border-radius: 20px;
-  font-size: 12px;
-  font-weight: bold;
-  text-transform: uppercase;
-}
-
-.status-pending {
-  background: #fbbf24;
-  color: #92400e;
-}
-
-.status-completed {
-  background: #34d399;
-  color: #065f46;
-}
-
-.status-overdue {
-  background: #f87171;
-  color: #991b1b;
-}
-
-.action-buttons {
-  display: flex;
-  gap: 8px;
-}
-
-.action-btn {
-  padding: 6px 12px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: bold;
-  transition: all 0.3s ease;
-}
-
-.complete-btn {
-  background: #10b981;
-  color: white;
-}
-
-.complete-btn:hover {
-  background: #059669;
-}
-
-.delete-btn {
-  background: #ef4444;
-  color: white;
-}
-
-.delete-btn:hover {
-  background: #dc2626;
-}
-
-.completed-task {
-  text-decoration: line-through;
-  opacity: 0.7;
-}
-
-@media (max-width: 768px) {
-  .todo-card {
-    padding: 20px;
-  }
-
-  .title {
-    font-size: 2rem;
-  }
-
-  .input-group {
-    flex-direction: column;
-  }
-
-  .controls {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .filter-section {
-    justify-content: center;
-  }
-
-  .todo-table {
-    font-size: 14px;
-  }
-
-  .todo-table th,
-  .todo-table td {
-    padding: 10px 8px;
-  }
-}
-
-@media (max-width: 480px) {
-  .todo-table th:nth-child(2),
-  .todo-table td:nth-child(2) {
-    display: none;
-  }
-
-  .action-buttons {
-    flex-direction: column;
-  }
-}
+document.addEventListener('DOMContentLoaded', () => {
+    window.todoApp = new TodoApp();
+});
